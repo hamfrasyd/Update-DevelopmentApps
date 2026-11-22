@@ -4,7 +4,8 @@
     Installs missing developer applications and updates installed applications.
 .DESCRIPTION
     Uses WinGet with explicitly configured package IDs. Installs missing packages
-    by default; -Check only reports changes. The application list is in
+    by default. -Check reports available updates without installing or upgrading
+    applications. The WinGet catalog may still be refreshed. The application list is in
     $ApplicationDefinitions (plus optional Local/Applications.local.json). -Setup installs this script
     for the current Windows user and registers the update-devapps command.
     -List, -Add, -Remove, -DisableInstall and -EnableInstall manage local settings.
@@ -172,10 +173,10 @@ exit /b %ERRORLEVEL%
     Write-Host "Command: $script:LauncherPath"
     Write-Host ''
     Write-Host 'Try these commands:' -ForegroundColor Cyan
-    Write-Host '  update-devapps -Check (Checks for available updates and missing applications without making changes)'
+    Write-Host '  update-devapps -Check (Checks available updates without installing or upgrading applications. The WinGet catalog may be refreshed.)'
     Write-Host '  update-devapps (Updates installed applications and installs missing applications)'
     Write-Host '  update-devapps -Update (Updates installed applications without installing missing ones)'
-    Write-Host '  update-devapps -Check -Diagnostic (Checks for updates and displays detailed troubleshooting information without making changes)'
+    Write-Host '  update-devapps -Check -Diagnostic (Checks for updates and displays troubleshooting detail. Applications are not installed or upgraded.)'
     Write-Host '  update-devapps -List (Shows your effective local configuration)'
     Write-Host '  update-devapps -Add Discord (Searches WinGet or restores a default application)'
     Write-Host '  update-devapps -Remove Obsidian (Excludes an application without uninstalling it)'
@@ -311,7 +312,7 @@ function New-LocalConfiguration {
 function Assert-ValidPackageId {
     param([Parameter(Mandatory)][string]$Value)
 
-    if ($Value.Length -gt 200 -or $Value -cnotmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') {
+    if ($Value.Length -gt 200 -or $Value -cnotmatch '^[A-Za-z0-9][A-Za-z0-9._+-]*$') {
         throw "Invalid WinGet PackageId '$Value'. Use a valid catalog ID such as 'Discord.Discord'."
     }
 }
@@ -389,6 +390,8 @@ function Save-LocalConfiguration {
     New-Item -ItemType Directory -Path $script:LocalDirectory -Force | Out-Null
 
     $temporaryPath = Join-Path $script:LocalDirectory ("$($script:LocalConfigurationFileName)." + [guid]::NewGuid().ToString('N') + '.tmp')
+    $backupPath = $temporaryPath + '.bak'
+    $preserveBackup = $false
     try {
         $serializableConfiguration = [ordered]@{
             SchemaVersion = $script:LocalConfigurationSchemaVersion
@@ -401,16 +404,41 @@ function Save-LocalConfiguration {
         $json = ConvertTo-Json -InputObject $serializableConfiguration -Depth 10
         Set-Content -LiteralPath $temporaryPath -Value $json -Encoding utf8 -ErrorAction Stop
         if (Test-Path -LiteralPath $script:LocalConfigurationPath -PathType Leaf) {
-            # PowerShell turns $null into an empty string here, which File.Replace rejects.
-            [System.IO.File]::Replace($temporaryPath, $script:LocalConfigurationPath, [NullString]::Value)
+            # PowerShell binds $null as an empty backup path, which File.Replace rejects.
+            # A real backup file keeps the previous settings when replacement fails.
+            try {
+                [System.IO.File]::Replace($temporaryPath, $script:LocalConfigurationPath, $backupPath)
+            }
+            catch {
+                $replaceError = $_.Exception.Message
+                $destinationMissing = -not (Test-Path -LiteralPath $script:LocalConfigurationPath -PathType Leaf)
+                if ($destinationMissing -and (Test-Path -LiteralPath $backupPath -PathType Leaf)) {
+                    try {
+                        [System.IO.File]::Move($backupPath, $script:LocalConfigurationPath)
+                    }
+                    catch {
+                        $preserveBackup = $true
+                        throw "Cannot save local configuration '$($script:LocalConfigurationPath)'. Previous settings are still in '$backupPath'. Details: $replaceError"
+                    }
+                }
+                throw "Cannot save local configuration '$($script:LocalConfigurationPath)'. Existing settings were left unchanged. Details: $replaceError"
+            }
         }
         else {
             [System.IO.File]::Move($temporaryPath, $script:LocalConfigurationPath)
         }
     }
+    catch {
+        if ($_.Exception.Message -like 'Cannot save local configuration*') {
+            throw
+        }
+        throw "Cannot save local configuration '$($script:LocalConfigurationPath)'. Existing settings were left unchanged. Details: $($_.Exception.Message)"
+    }
     finally {
-        if (Test-Path -LiteralPath $temporaryPath) {
-            Remove-Item -LiteralPath $temporaryPath -Force -ErrorAction SilentlyContinue
+        foreach ($leftoverPath in @($temporaryPath, $backupPath)) {
+            if ((-not $preserveBackup -or $leftoverPath -ne $backupPath) -and (Test-Path -LiteralPath $leftoverPath)) {
+                Remove-Item -LiteralPath $leftoverPath -Force -ErrorAction SilentlyContinue
+            }
         }
     }
 }
@@ -456,20 +484,20 @@ function Resolve-ConfiguredApplication {
     $exactMatches = @($knownApplications | Where-Object {
         $_.Name -eq $NameOrId -or $_.PackageId -eq $NameOrId
     })
-    $matches = $exactMatches
-    if ($matches.Count -eq 0) {
-        $matches = @($knownApplications | Where-Object {
+    $matchingApplications = $exactMatches
+    if ($matchingApplications.Count -eq 0) {
+        $matchingApplications = @($knownApplications | Where-Object {
             $_.Name.IndexOf($NameOrId, [StringComparison]::OrdinalIgnoreCase) -ge 0
         })
     }
-    if ($matches.Count -eq 0) {
+    if ($matchingApplications.Count -eq 0) {
         throw "Application '$NameOrId' is not on your list. Use update-devapps -List or -Add '$NameOrId'."
     }
-    if ($matches.Count -gt 1) {
-        $names = @($matches | ForEach-Object { "$($_.Name) [$($_.PackageId)]" }) -join ', '
+    if ($matchingApplications.Count -gt 1) {
+        $names = @($matchingApplications | ForEach-Object { "$($_.Name) [$($_.PackageId)]" }) -join ', '
         throw "Application name '$NameOrId' is ambiguous: $names. Use the exact PackageId instead."
     }
-    return $matches[0]
+    return $matchingApplications[0]
 }
 
 function Write-ConfiguredApplications {
@@ -568,7 +596,7 @@ function Find-WinGetCandidates {
         }
         $candidateName = $line.Substring(0, $idStart).Trim()
         $candidateId = $line.Substring($idStart, $versionStart - $idStart).Trim()
-        if ([string]::IsNullOrWhiteSpace($candidateName) -or $candidateId -cnotmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') {
+        if ([string]::IsNullOrWhiteSpace($candidateName) -or $candidateId -cnotmatch '^[A-Za-z0-9][A-Za-z0-9._+-]*$') {
             continue
         }
         if ($seenIds.Add($candidateId)) {
@@ -1137,6 +1165,15 @@ function Invoke-ApplicationCheck {
     Update-InstalledApplication -Application $Application -InstalledVersion $installedVersion -PinnedTargetVersion $targetVersion
 }
 
+function Get-UpdaterExitCode {
+    $failedStatuses = @('UPDATE FAILED', 'INSTALL FAILED', 'CHECK FAILED')
+    $failedResults = @($script:ApplicationResults | Where-Object { $failedStatuses -contains $_.Status })
+    if ($failedResults.Count -gt 0) {
+        return 1
+    }
+    return 0
+}
+
 function Write-Summary {
     Write-Host "`n========== SUMMARY ==========" -ForegroundColor Cyan
     $statuses = @(
@@ -1146,16 +1183,16 @@ function Write-Summary {
     )
 
     foreach ($status in $statuses) {
-        $matches = @($script:ApplicationResults | Where-Object { $_.Status -eq $status })
-        if ($matches.Count -eq 0) {
+        $statusResults = @($script:ApplicationResults | Where-Object { $_.Status -eq $status })
+        if ($statusResults.Count -eq 0) {
             continue
         }
-        Write-Host ("{0,2}  " -f $matches.Count) -NoNewline
+        Write-Host ("{0,2}  " -f $statusResults.Count) -NoNewline
         Write-ColoredStatus -Status $status
     }
 
     if ($Check) {
-        Write-Host "`nCheck-only mode: no applications were changed." -ForegroundColor Yellow
+        Write-Host "`nCheck-only mode: applications were not installed or updated. The WinGet catalog may have been refreshed." -ForegroundColor Yellow
     }
     elseif ($Update) {
         Write-Host "`nFinished. Installation of missing packages was disabled." -ForegroundColor DarkGray
@@ -1228,7 +1265,7 @@ if (-not $SkipSourceUpdate) {
     if ($sourceUpdate.ExitCode -ne 0) {
         Write-Host 'WinGet catalog refresh failed. No changes made.' -ForegroundColor Red
         Write-DiagnosticOutput -Description 'winget source update' -WinGetResult $sourceUpdate
-        return
+        exit 1
     }
 }
 
@@ -1237,7 +1274,7 @@ $script:InstalledPackages = Invoke-WinGet -Arguments @('list', '--accept-source-
 if ($script:InstalledPackages.ExitCode -ne 0 -or [string]::IsNullOrWhiteSpace($script:InstalledPackages.Output)) {
     Write-Host 'Cannot read installed packages from WinGet. No changes made.' -ForegroundColor Red
     Write-DiagnosticOutput -Description 'winget list' -WinGetResult $script:InstalledPackages
-    return
+    exit 1
 }
 
 $script:AvailableUpgrades = Invoke-WinGet -Arguments @('list', '--upgrade-available', '--accept-source-agreements')
@@ -1245,11 +1282,17 @@ $expectedNoUpgrades = $script:AvailableUpgrades.Output -match '(?i)no available 
 if ($script:AvailableUpgrades.ExitCode -ne 0 -and -not $expectedNoUpgrades) {
     Write-Host 'Cannot reliably read WinGet updates. No changes made.' -ForegroundColor Red
     Write-DiagnosticOutput -Description 'winget list --upgrade-available' -WinGetResult $script:AvailableUpgrades
-    return
+    exit 1
 }
 
 foreach ($application in $ApplicationDefinitions) {
-    Invoke-ApplicationCheck -Application $application
+    try {
+        Invoke-ApplicationCheck -Application $application
+    }
+    catch {
+        Add-ApplicationResult -Name $application.Name -Status 'CHECK FAILED' -Details $_.Exception.Message
+    }
 }
 
 Write-Summary
+exit (Get-UpdaterExitCode)

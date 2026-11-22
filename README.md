@@ -29,10 +29,12 @@ Alle kommandoer kan køres fra enhver mappe i PowerShell 7. **Store og små bogs
 | Formål | Kommando | Andre navne |
 | --- | --- | --- |
 | Opdatér installerede programmer og installér manglende | `update-devapps` |   |
-| Kontrollér tilgængelige opdateringer uden ændringer | `update-devapps -Check` | `-c` |
+| Kontrollér tilgængelige opdateringer uden at installere eller opdatere programmer | `update-devapps -Check` | `-c` |
 | Opdatér kun allerede installerede programmer i denne kørsel | `update-devapps -Update` | `-u` |
 | Vis detaljer til fejlfinding (kombinér med `-Check`) | `update-devapps -Check -Diagnostic` | `-c -d` |
 | Spring GitHub-selvopdateringen over | `update-devapps -SkipSelfUpdate` | `-ssu` |
+
+`-Check` kontrollerer tilgængelige programopdateringer uden at installere eller opdatere programmer. WinGet-kataloget kan blive opdateret.
 
 **Normalt bruger du:**
 

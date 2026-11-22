@@ -1,174 +1,12 @@
-# Smoke tests for local configuration. Windows runner + PowerShell 7 required.
+# Configuration smoke tests. Windows runner + PowerShell 7 required.
 # Each test is Arrange, Act, Assert and contains one assertion. Names follow
 # Subject_WhenCondition_ShouldExpectedBehavior. Configuration state is not shared.
+# WinGet installation and update behavior is covered by tests/WinGetTests.ps1.
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 
-$script:ScriptPath = (Resolve-Path (Join-Path $PSScriptRoot '..\Update-DevelopmentApps.ps1')).Path
-$script:AssertionCount = 0
-$script:PassedCount = 0
-$script:FailedCases = [System.Collections.Generic.List[string]]::new()
+. (Join-Path $PSScriptRoot 'TestCommon.ps1')
 
-function Invoke-Test {
-    param(
-        [Parameter(Mandatory)][string]$Name,
-        [Parameter(Mandatory)][scriptblock]$Case
-    )
-
-    $script:AssertionCount = 0
-    try {
-        & $Case
-        if ($script:AssertionCount -ne 1) {
-            throw 'A test must contain exactly one assertion.'
-        }
-        $script:PassedCount++
-        Write-Host "PASS  $Name" -ForegroundColor DarkGray
-    }
-    catch {
-        $script:FailedCases.Add("${Name}: $($_.Exception.Message)")
-        Write-Host "FAIL  $Name" -ForegroundColor Red
-        Write-Host "      $($_.Exception.Message)" -ForegroundColor Red
-    }
-}
-
-function Assert-Result {
-    param(
-        [Parameter(Mandatory)][bool]$Condition,
-        [Parameter(Mandatory)][string]$Message
-    )
-
-    $script:AssertionCount++
-    if ($script:AssertionCount -gt 1) {
-        throw 'A test may contain only one assertion.'
-    }
-    if (-not $Condition) {
-        throw $Message
-    }
-}
-
-function New-TestRoot {
-    $root = Join-Path ([System.IO.Path]::GetTempPath()) ('DevAppUpdaterTests-' + [guid]::NewGuid().ToString('N'))
-    New-Item -ItemType Directory -Force -Path $root | Out-Null
-    return $root
-}
-
-function Remove-TestRoot {
-    param([string]$Root)
-
-    if ($Root -and (Test-Path -LiteralPath $Root)) {
-        Remove-Item -LiteralPath $Root -Recurse -Force
-    }
-}
-
-function Get-ConfigurationPath {
-    param([Parameter(Mandatory)][string]$Root)
-
-    return (Join-Path $Root 'Programs\DevAppUpdater\Local\Applications.local.json')
-}
-
-function Format-JsonString {
-    param([Parameter(Mandatory)][string]$Value)
-
-    return '"' + ($Value -replace '\\', '\\' -replace '"', '\"') + '"'
-}
-
-function Save-TestConfiguration {
-    param(
-        [Parameter(Mandatory)][string]$Root,
-        [string[]]$RemovedPackageIds = @(),
-        [string[]]$UpdateOnlyPackageIds = @(),
-        [hashtable[]]$CustomApplications = @()
-    )
-
-    $path = Get-ConfigurationPath -Root $Root
-    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $path) | Out-Null
-
-    $removed = (@($RemovedPackageIds) | ForEach-Object { Format-JsonString $_ }) -join ','
-    $updateOnly = (@($UpdateOnlyPackageIds) | ForEach-Object { Format-JsonString $_ }) -join ','
-    $custom = (@($CustomApplications) | ForEach-Object {
-        '{ "Name": ' + (Format-JsonString $_.Name) + ', "PackageId": ' + (Format-JsonString $_.PackageId) + ' }'
-    }) -join ','
-    $json = '{"SchemaVersion":1,"RemovedPackageIds":[' + $removed + '],"UpdateOnlyPackageIds":[' + $updateOnly + '],"CustomApplications":[' + $custom + ']}'
-    Set-Content -LiteralPath $path -Value $json -Encoding utf8
-    return $path
-}
-
-function Read-TestConfiguration {
-    param([Parameter(Mandatory)][string]$Root)
-
-    return (Get-Content -LiteralPath (Get-ConfigurationPath -Root $Root) -Raw | ConvertFrom-Json -Depth 10)
-}
-
-function Invoke-Updater {
-    param(
-        [Parameter(Mandatory)][string]$Root,
-        [Parameter(Mandatory)][string[]]$Arguments
-    )
-
-    $previousLocalAppData = $env:LOCALAPPDATA
-    $previousPath = $env:PATH
-    try {
-        $env:LOCALAPPDATA = $Root
-        $env:PATH = $script:PathWithMock
-        $nativeOutput = & pwsh -NoProfile -File $script:ScriptPath @Arguments *>&1
-        $exitCode = $LASTEXITCODE
-        return [pscustomobject]@{
-            ExitCode = $exitCode
-            Output   = ($nativeOutput | Out-String)
-        }
-    }
-    finally {
-        $env:LOCALAPPDATA = $previousLocalAppData
-        $env:PATH = $previousPath
-    }
-}
-
-function Get-FailureDetail {
-    param(
-        [string]$Message,
-        $Result
-    )
-
-    if (-not $Result) {
-        return $Message
-    }
-    $excerpt = (($Result.Output -replace '\s+', ' ').Trim())
-    if ($excerpt.Length -gt 300) {
-        $excerpt = $excerpt.Substring(0, 300)
-    }
-    return "$Message Exit code $($Result.ExitCode). $excerpt"
-}
-
-function Get-ParameterAliases {
-    param(
-        [Parameter(Mandatory)][System.Collections.IDictionary]$Parameters,
-        [Parameter(Mandatory)][string]$Name
-    )
-
-    if (-not $Parameters.ContainsKey($Name)) {
-        return @()
-    }
-    return @($Parameters[$Name].Aliases)
-}
-
-$mockDirectory = Join-Path ([System.IO.Path]::GetTempPath()) ('DevAppUpdaterMock-' + [guid]::NewGuid().ToString('N'))
-New-Item -ItemType Directory -Force -Path $mockDirectory | Out-Null
-Set-Content -LiteralPath (Join-Path $mockDirectory 'winget.cmd') -Encoding ascii -Value @'
-@echo off
-if /I "%~1"=="show" (
- echo Found Discord [Discord.Discord]
- echo Version: 3.0.99
- exit /b 0
-)
-if /I "%~1"=="search" (
- echo Name                    Id                    Version   Source
- echo ---------------------------------------------------------------
- echo Discord                 Discord.Discord       1.0.99    winget
- exit /b 0
-)
-exit /b 2
-'@
-$script:PathWithMock = "$mockDirectory;$env:PATH"
 
 try {
     # Parameter contract. These tests inspect the script and do not run it.
@@ -611,19 +449,189 @@ try {
         }
     }
 
-    if ($script:FailedCases.Count -gt 0) {
-        Write-Host ''
-        Write-Host 'Failed smoke tests:' -ForegroundColor Red
-        foreach ($failedCase in $script:FailedCases) {
-            Write-Host "  $failedCase" -ForegroundColor Red
+    Invoke-Test 'Remove_WhenConfigurationJsonIsInvalid_ShouldExitWithCode1' {
+        $root = New-TestRoot
+        try {
+            # Arrange
+            $configurationPath = Get-ConfigurationPath -Root $root
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $configurationPath) | Out-Null
+            Set-Content -LiteralPath $configurationPath -Value '{invalid json' -Encoding utf8
+
+            # Act
+            $result = Invoke-Updater -Root $root -Arguments @('-r', 'Postman')
+
+            # Assert
+            Assert-Result ($result.ExitCode -eq 1) (
+                Get-FailureDetail -Result $result -Message 'Invalid JSON returned a success exit code.')
         }
-        throw "$($script:FailedCases.Count) smoke test(s) failed."
+        finally {
+            Remove-TestRoot $root
+        }
     }
 
-    Write-Host "All smoke tests passed ($($script:PassedCount))." -ForegroundColor Green
+    Invoke-Test 'Save_WhenConfigurationIsSavedThreeTimes_ShouldKeepSettingsAndRemoveTemporaryFiles' {
+        $root = New-TestRoot
+        try {
+            # Arrange: no local file yet
+
+            # Act
+            $first = Invoke-Updater -Root $root -Arguments @('-r', 'Obsidian')
+            $second = Invoke-Updater -Root $root -Arguments @('-di', 'Git')
+            $third = Invoke-Updater -Root $root -Arguments @('-r', 'Notepad++')
+            $configuration = Read-TestConfiguration -Root $root
+            $removed = @($configuration.RemovedPackageIds)
+            $updateOnly = @($configuration.UpdateOnlyPackageIds)
+            $directory = Split-Path -Parent (Get-ConfigurationPath -Root $root)
+            $leftovers = @(Get-ChildItem -LiteralPath $directory -Force | Where-Object { $_.Name -like '*.tmp' -or $_.Name -like '*.bak' })
+
+            # Assert
+            Assert-Result (
+                $first.ExitCode -eq 0 -and $second.ExitCode -eq 0 -and $third.ExitCode -eq 0 -and
+                ($removed -contains 'Obsidian.Obsidian') -and
+                ($removed -contains 'Notepad++.Notepad++') -and
+                ($updateOnly -contains 'Git.Git') -and
+                $leftovers.Count -eq 0
+            ) (Get-FailureDetail -Result $third -Message 'Repeated save did not keep every change or left temporary files.')
+        }
+        finally {
+            Remove-TestRoot $root
+        }
+    }
+
+    Invoke-Test 'Save_WhenDestinationIsReadOnly_ShouldLeaveExistingSettingsUnchanged' {
+        $root = New-TestRoot
+        $configurationPath = $null
+        try {
+            # Arrange
+            $null = Invoke-Updater -Root $root -Arguments @('-r', 'Obsidian')
+            $configurationPath = Get-ConfigurationPath -Root $root
+            $before = Get-Content -LiteralPath $configurationPath -Raw
+            (Get-Item -LiteralPath $configurationPath).IsReadOnly = $true
+
+            # Act
+            $result = Invoke-Updater -Root $root -Arguments @('-di', 'Git')
+            $after = Get-Content -LiteralPath $configurationPath -Raw
+            $directory = Split-Path -Parent $configurationPath
+            $leftovers = @(Get-ChildItem -LiteralPath $directory -Force | Where-Object { $_.Name -like '*.tmp' -or $_.Name -like '*.bak' })
+
+            # Assert
+            Assert-Result (
+                $before -ceq $after -and
+                $result.ExitCode -eq 1 -and
+                $result.Output -match 'left unchanged' -and
+                $leftovers.Count -eq 0
+            ) (Get-FailureDetail -Result $result -Message 'A failed save changed the existing configuration or left temporary files.')
+        }
+        finally {
+            if ($configurationPath -and (Test-Path -LiteralPath $configurationPath)) {
+                (Get-Item -LiteralPath $configurationPath).IsReadOnly = $false
+            }
+            Remove-TestRoot $root
+        }
+    }
+
+    Invoke-Test 'Save_WhenOnePackageIsRemoved_ShouldKeepJsonArrays' {
+        $root = New-TestRoot
+        try {
+            # Arrange: empty local profile
+
+            # Act
+            $result = Invoke-Updater -Root $root -Arguments @('-r', 'Obsidian')
+            $raw = Get-Content -LiteralPath (Get-ConfigurationPath -Root $root) -Raw
+
+            # Assert
+            Assert-Result (
+                $raw -match '"RemovedPackageIds"\s*:\s*\[\s*"Obsidian\.Obsidian"\s*\]' -and
+                $raw -match '"UpdateOnlyPackageIds"\s*:\s*\[\s*\]' -and
+                $raw -match '"CustomApplications"\s*:\s*\[\s*\]'
+            ) (Get-FailureDetail -Result $result -Message 'Saved JSON did not keep array properties.')
+        }
+        finally {
+            Remove-TestRoot $root
+        }
+    }
+
+    Invoke-Test 'Add_WhenDiscordIsAlreadyConfigured_ShouldNotCreateAnotherEntry' {
+        $root = New-TestRoot
+        try {
+            # Arrange
+            $null = Save-TestConfiguration -Root $root -CustomApplications @(@{ Name = 'Discord'; PackageId = 'Discord.Discord' })
+
+            # Act
+            $result = Invoke-Updater -Root $root -Arguments @('-a', 'Discord', '-PackageId', 'Discord.Discord')
+            $configuration = Read-TestConfiguration -Root $root
+
+            # Assert
+            Assert-Result (@($configuration.CustomApplications).Count -eq 1) (
+                Get-FailureDetail -Result $result -Message 'Duplicate Add created another Discord entry.')
+        }
+        finally {
+            Remove-TestRoot $root
+        }
+    }
+
+    Invoke-Test 'Add_WhenPackageIdIsUnknown_ShouldSaveNothing' {
+        $root = New-TestRoot
+        try {
+            # Arrange
+            $configurationPath = Get-ConfigurationPath -Root $root
+
+            # Act
+            $result = Invoke-Updater -Root $root -Arguments @('-a', 'Missing', '-PackageId', 'Missing.Missing')
+
+            # Assert
+            Assert-Result (
+                -not (Test-Path -LiteralPath $configurationPath) -and
+                $result.ExitCode -eq 1 -and
+                $result.Output -match 'Nothing was saved'
+            ) (Get-FailureDetail -Result $result -Message 'Unknown PackageId was saved or reported as success.')
+        }
+        finally {
+            Remove-TestRoot $root
+        }
+    }
+
+    Invoke-Test 'Readme_WhenDescribingCheck_ShouldExplainThatTheCatalogMayBeUpdated' {
+        # Arrange
+        $readme = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..\README.md') -Raw
+
+        # Act
+        $describesCheck = $readme -match 'uden at installere eller opdatere programmer' -and
+            $readme -match 'WinGet-kataloget kan blive opdateret'
+
+        # Assert
+        Assert-Result $describesCheck 'README does not explain that -Check can refresh the WinGet catalog.'
+    }
+
+    Invoke-Test 'Setup_WhenRequested_ShouldWriteLauncherAndRestoreUserPath' {
+        $root = New-TestRoot
+        $originalUserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+        try {
+            # Arrange: isolated LOCALAPPDATA, real user PATH restored before the assertion returns
+
+            # Act
+            $result = Invoke-Updater -Root $root -Arguments @('-Setup')
+            $launcherPath = Join-Path $root 'Programs\DevAppUpdater\bin\update-devapps.cmd'
+            $launcher = Get-Content -LiteralPath $launcherPath -Raw
+            [Environment]::SetEnvironmentVariable('Path', $originalUserPath, 'User')
+            $restoredUserPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+
+            # Assert
+            Assert-Result (
+                $result.ExitCode -eq 0 -and
+                $launcher -match 'pwsh\.exe -NoLogo -NoProfile -File "%~dp0\.\.\\Update-DevelopmentApps\.ps1" %\*' -and
+                $launcher -match 'exit /b %ERRORLEVEL%' -and
+                $restoredUserPath -eq $originalUserPath
+            ) (Get-FailureDetail -Result $result -Message 'Setup did not write the expected launcher.')
+        }
+        finally {
+            [Environment]::SetEnvironmentVariable('Path', $originalUserPath, 'User')
+            Remove-TestRoot $root
+        }
+    }
+
+    Complete-TestRun -Name 'smoke'
 }
 finally {
-    if (Test-Path -LiteralPath $mockDirectory) {
-        Remove-Item -LiteralPath $mockDirectory -Recurse -Force
-    }
+    Clear-WinGetMockEnvironment
 }

@@ -26,7 +26,9 @@ jobs:
           foreach ($path in @(
               'Update-DevelopmentApps.ps1',
               '.github/scripts/ReleaseVersion.ps1',
+              'tests/TestCommon.ps1',
               'tests/SmokeTests.ps1',
+              'tests/WinGetTests.ps1',
               'tests/ReleaseVersionTests.ps1'
           )) {
               $tokens = $null
@@ -37,9 +39,36 @@ jobs:
               }
           }
 
+      - name: Run PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force
+          $settings = Join-Path $PWD '.github/PSScriptAnalyzerSettings.psd1'
+          $paths = @(
+              'Update-DevelopmentApps.ps1',
+              '.github/scripts/ReleaseVersion.ps1',
+              'tests/TestCommon.ps1',
+              'tests/SmokeTests.ps1',
+              'tests/WinGetTests.ps1',
+              'tests/ReleaseVersionTests.ps1'
+          )
+          $results = @(foreach ($path in $paths) {
+              Invoke-ScriptAnalyzer -Path (Join-Path $PWD $path) -Settings $settings
+          })
+          if ($results.Count -gt 0) {
+              $results | Format-Table -AutoSize | Out-String | Write-Host
+              throw "$($results.Count) PSScriptAnalyzer issue(s) found."
+          }
+
       - name: Run configuration smoke tests
         shell: pwsh
         run: ./tests/SmokeTests.ps1
+
+      - name: Run WinGet behavior tests
+        shell: pwsh
+        run: ./tests/WinGetTests.ps1
 
       - name: Run release version tests
         shell: pwsh
