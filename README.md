@@ -96,7 +96,7 @@ winget search "Programnavn"
 @{ Name = 'Git'; PackageId = 'Git.Git'; InstallIfMissing = $false }
 ```
 
-Denne linje er et eksempel på en post i ` $ApplicationDefinitions `. Hvis du ønsker at ændre **standardlisten for alle brugere**, skal du ændre scriptet på `dev`, oprette en pull request til release-branchen og udgive en ny release.
+Denne linje er et eksempel på en post i `$ApplicationDefinitions`. Hvis du ønsker at ændre **standardlisten for alle brugere**, skal du ændre scriptet på `dev`, oprette en pull request til release-branchen og udgive en ny release.
 
 > **Vigtigt:** Redigér normalt ikke den installerede `Update-DevelopmentApps.ps1` direkte. Selvopdatering erstatter filen, så lokale ændringer dér går tabt.
 
