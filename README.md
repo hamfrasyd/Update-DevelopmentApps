@@ -1,45 +1,38 @@
 # Update-DevelopmentApps
 
-Et PowerShell-script til Windows, som bruger **WinGet** til at installere manglende udviklingsprogrammer og opdatere installerede programmer. Scriptet kan også **opdatere sig selv fra den seneste GitHub Release**.
+Et PowerShell-værktøj til Windows, der bruger **WinGet** til at installere manglende udviklingsprogrammer og opdatere allerede installerede. Værktøjet **opdaterer også sig selv fra den seneste GitHub Release**.
 
-> **Kræver:** Windows med [PowerShell 7](https://github.com/PowerShell/PowerShell/releases/latest) (`pwsh`) og WinGet (Windows App Installer).
+> **Krav:** Windows, [PowerShell 7](https://github.com/PowerShell/PowerShell/releases/latest) (`pwsh`) og [WinGet](https://github.com/microsoft/winget-cli) (Windows App Installer).
 
 ## 1. Download
 
-1. Åbn **[seneste GitHub Release](https://github.com/hamfrasyd/Update-DevelopmentApps/releases/latest)**.
-2. Find **Assets** og klik på **`Update-DevelopmentApps.ps1`**. Vælg **ikke** `Source code (zip)` eller `Source code (tar.gz)`.
-3. Gem filen i din **Downloads**-mappe:
+1. Gå til **[seneste release](https://github.com/hamfrasyd/Update-DevelopmentApps/releases/latest)**.
+2. Under **Assets**: Download **`Update-DevelopmentApps.ps1`**. Vælg **ikke** `Source code (zip)` eller `Source code (tar.gz)`.
+3. Gem filen i **Downloads** (`C:\Users\<dinbruger>\Downloads`).
 
-   ```text
-   C:\Users\<dinbruger>\Downloads\Update-DevelopmentApps.ps1
-   ```
-
-**[Download scriptet direkte fra seneste release](https://github.com/hamfrasyd/Update-DevelopmentApps/releases/latest/download/Update-DevelopmentApps.ps1)**
+[Download `.ps1` direkte fra seneste release](https://github.com/hamfrasyd/Update-DevelopmentApps/releases/latest/download/Update-DevelopmentApps.ps1)
 
 ## 2. Engangsopsætning
-
 1. Åbn **PowerShell 7**.
 2. Kopiér og kør:
 
-   ```powershell
-   pwsh -NoProfile -ExecutionPolicy Bypass -File "$HOME\Downloads\Update-DevelopmentApps.ps1" -Setup
-   ```
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File "$HOME\Downloads\Update-DevelopmentApps.ps1" -Setup
+```
 
-3. Åbn en **ny PowerShell-terminal**. Du kan nu slette filen i Downloads.
+Åbn derefter en **ny PowerShell-terminal**. Filen i Downloads kan slettes. Opsætningen installerer kommandoen for din Windows-bruger, **ikke alle programmerne**.
 
-> `-Setup` installerer kun selve kommandoen `update-devapps` for din Windows-bruger. Programmerne installeres først, når du kører `update-devapps`.
+## 3. Kommandoer: Opdatér / Installér
 
-## 3. Brug kommandoerne
+Alle kommandoer kan køres fra enhver mappe i PowerShell 7. **Store og små bogstaver er ens** (`-c` og `-C` virker begge).
 
-Kommandoerne kan køres fra **enhver mappe** i PowerShell.
-
-| Formål | Kommando |
-|---|---|
-| Installér manglende programmer og opdatér installerede | `update-devapps` |
-| Se tilgængelige installationer og opdateringer uden at ændre programmer | `update-devapps -CheckOnly` |
-| Opdatér kun allerede installerede programmer | `update-devapps -NoInstallMissing` |
-| Vis detaljer til fejlfinding uden at installere/opdatere programmer | `update-devapps -CheckOnly -Diagnostic` |
-| Kør uden at kontrollere GitHub for en ny scriptversion | `update-devapps -SkipSelfUpdate` |
+| Formål | Kommando | Andre navne |
+| --- | --- | --- |
+| Opdatér installerede programmer og installér manglende | `update-devapps` |   |
+| Kontrollér tilgængelige opdateringer uden ændringer | `update-devapps -Check` | `-c` |
+| Opdatér kun allerede installerede programmer i denne kørsel | `update-devapps -Update` | `-u` |
+| Vis detaljer til fejlfinding (kombinér med `-Check`) | `update-devapps -Check -Diagnostic` | `-c -d` |
+| Spring GitHub-selvopdateringen over | `update-devapps -SkipSelfUpdate` | `-ssu` |
 
 **Normalt bruger du:**
 
@@ -47,112 +40,70 @@ Kommandoerne kan køres fra **enhver mappe** i PowerShell.
 update-devapps
 ```
 
-### Automatisk selvopdatering
+## 4. Tilpas din programliste
 
-Når du kører `update-devapps`, kontrollerer scriptet, om der er en nyere **GitHub Release**. Hvis der er det, hentes den nye `.ps1`-fil, kontrolleres med SHA-256 og erstatter den installerede kopi, før programopdateringerne fortsætter.
+Du kan ændre listen direkte med kommandoer, **uden at redigere scriptet eller bruge administratorrettigheder**. Ingen af kommandoerne nedenfor afinstallerer programmer fra Windows.
 
-`-CheckOnly` viser, om en nyere scriptversion findes, men installerer den ikke. Hvis GitHub ikke kan kontaktes, fortsætter WinGet-delen som normalt.
+| Formål | Kommando | Kort form |
+| --- | --- | --- |
+| Vis alle standard- og custom-programmer | `update-devapps -List` | `-l` |
+| Tilføj et nyt program, eller genaktivér et fjernet standardprogram | `update-devapps -Add Discord` | `-a Discord` |
+| Tilføj med præcist WinGet-ID | `update-devapps -Add Discord -PackageId Discord.Discord` | `-a Discord -PackageId Discord.Discord` |
+| Fjern et program fra opdateringslisten | `update-devapps -Remove Obsidian` | `-r Obsidian` |
+| Slå automatisk installation fra for et program | `update-devapps -DisableInstall Git` | `-di Git` |
+| Tillad automatisk installation igen | `update-devapps -EnableInstall Git` | `-ei Git` |
 
-## 4. Ændr hvilke programmer der håndteres
+**Add og Remove tilpasser sig automatisk programtypen:**
 
-Du skal **kun ændre** `Applications.local.ps1` for at tilpasse programmerne på din egen computer.
+- **Standardprogram:** `-Remove Obsidian` udelukker Obsidian fra opdateringslisten; `-Add Obsidian` inkluderer det igen. Standardlisten på GitHub ændres ikke.
+- **Custom-program:** `-Add Discord` søger i WinGet og tilføjer Discord lokalt; `-Remove Discord` sletter registreringen fra den lokale JSON-konfiguration. Det afinstallerer ikke Discord fra Windows.
+- **Begge typer:** `-DisableInstall Git` betyder, at Git stadig må opdateres, men ikke installeres, hvis det mangler. `-EnableInstall Git` tillader installation igen. Indstillingen gemmes lokalt.
 
-Filen bliver ikke overskrevet, når `update-devapps` henter en ny GitHub Release.
-
-### 1. Åbn eller opret din lokale konfigurationsfil
-
-Åbn PowerShell, og kør:
-
-```
-notepad "$env:LOCALAPPDATA\Programs\DevAppUpdater\Applications.local.ps1"
-```
-
-Hvis filen ikke findes, skal du vælge **Ja** for at oprette den.
-
-### 2. Fjern programmer fra listen
-
-Hvis du ikke ønsker, at scriptet skal installere eller opdatere eksempelvis **Obsidian** eller **Postman**:
+**Eksempel:**
 
 ```powershell
-# REMOVE - Programmer der ikke skal håndteres
-$ApplicationDefinitions = @($ApplicationDefinitions | Where-Object { $_.PackageId -ne 'Obsidian.Obsidian' })
-$ApplicationDefinitions = @($ApplicationDefinitions | Where-Object { $_.PackageId -ne 'Postman.Postman' })
+update-devapps -r Obsidian
+update-devapps -di Git
+update-devapps -a Discord
+update-devapps -l
+update-devapps -a Obsidian
 ```
 
-Dette fjerner kun programmerne fra opdateringslisten. De bliver ikke afinstalleret fra computeren.
+`-Add` søger i WinGet for nye custom-programmer; ved flere match vælger du programmet fra en nummereret liste. Ukendte WinGet-ID'er gemmes ikke. En allerede kendt standardapplikation genaktiveres uden WinGet-søgning.
 
-### 3. Tilføj programmer til listen
+Dine personlige valg gemmes automatisk i:
 
-Hvis du ønsker at tilføje eksempelvis **7-Zip** eller **VLC**:
-
-```powershell
-# ADD - Programmer der skal tilføjes
-$ApplicationDefinitions += @{ Name = '7-Zip'; PackageId = '7zip.7zip' }
-$ApplicationDefinitions += @{ Name = 'VLC';   PackageId = 'VideoLAN.VLC' }
+```text
+%LOCALAPPDATA%\Programs\DevAppUpdater\Local\Applications.local.json
 ```
 
-Programmerne installeres, hvis de mangler, og opdateres, hvis de allerede findes.
+Filen oprettes først, når du ændrer noget. Du kan nulstille dine egne valg ved at slette JSON-filen. **`Local`-mappen bevares ved selvopdatering**, og `-List` kræver ikke netværksadgang. Hvis JSON-filen bliver ugyldig, stopper værktøjet med en fejl og beder dig undersøge filen i stedet for at overskrive den.
 
-### 4. Opdatér et program uden at installere det
+## Standardprogrammer
+| Programmer                    |
+| ----------------------------- |
+| Obsidian                      |
+| Notepad++                     |
+| Postman                       |
+| Wireshark                     |
+| Visual Studio 2026 Enterprise |
+| VS Code                       |
+| Cursor                        |
+| Docker Desktop                |
+| Ollama                        |
+| SSMS 22                       |
+| MySQL Workbench               |
+| Neo4j Desktop                 |
+| MongoDB Compass               |
+| MongoDB Shell                 |
+| DataGrip                      |
+| Git                           |
+| Python 3.15                   |
+| Java JDK 25 LTS               |
+| .NET 10 SDK                   |
+| .NET 11 SDK                   |
+| PowerShell                    |
 
-Hvis du eksempelvis ønsker, at **Git** kun skal opdateres, hvis det allerede er installeret, skal du bruge:
+Programlisten omfatter databaseklienter, **ikke selve serverne** (SQL Server-, MySQL-, MongoDB- eller Neo4j-server).
 
-```powershell
-# UPDATE ONLY - Installér ikke programmet, hvis det mangler
-$ApplicationDefinitions | Where-Object { $_.PackageId -eq 'Git.Git' } | ForEach-Object { $_['InstallIfMissing'] = $false }
-```
-
-Git forbliver på listen, men installeres ikke automatisk, hvis det mangler.
-
-### 5. Gem dine ændringer
-
-1. Tryk **Ctrl + S** i Notepad.
-2. Luk Notepad.
-3. Kør følgende for at se resultatet:
-
-```
-update-devapps -CheckOnly
-```
-
-Du behøver **ikke køre** `**-Setup**` **igen**.
-
----
-
-### Eksempel på en komplet Applications.local.ps1
-
-Du kan kombinere alle ændringer i den samme fil:
-
-```powershell
-# REMOVE - Programmer der ikke skal håndteres
-$ApplicationDefinitions = @($ApplicationDefinitions | Where-Object { $_.PackageId -ne 'Obsidian.Obsidian' })
-$ApplicationDefinitions = @($ApplicationDefinitions | Where-Object { $_.PackageId -ne 'Postman.Postman' })
-
-# ADD - Programmer der skal tilføjes
-$ApplicationDefinitions += @{ Name = '7-Zip'; PackageId = '7zip.7zip' }
-$ApplicationDefinitions += @{ Name = 'VLC';   PackageId = 'VideoLAN.VLC' }
-
-# UPDATE ONLY - Installér ikke programmet, hvis det mangler
-$ApplicationDefinitions | Where-Object { $_.PackageId -eq 'Git.Git' } | ForEach-Object { $_['InstallIfMissing'] = $false }
-```
-
-**Find WinGet-ID for et nyt program:**
-
-```powershell
-winget search "Programnavn"
-```
-
-**Husk:** Slet eller udkommentér en linje med `#`, hvis du ikke længere ønsker den pågældende ændring.
-
-Ændringer i `Applications.local.ps1` gælder kun din computer. Standardlisten i GitHub-releasen forbliver uændret.
-## Programmer på standardlisten
-
-| | | |
-|---|---|---|
-| Obsidian | Notepad++ | Postman |
-| Wireshark | Visual Studio 2026 Enterprise | VS Code |
-| Cursor | Docker Desktop | Ollama |
-| SSMS 22 | MySQL Workbench | Neo4j Desktop |
-| MongoDB Compass | MongoDB Shell | DataGrip |
-| Git | Python 3.15 | Java JDK 25 LTS |
-| .NET 10 SDK | .NET 11 SDK | PowerShell |
-
+Nogle programinstallationer kan kræve administratorgodkendelse.
