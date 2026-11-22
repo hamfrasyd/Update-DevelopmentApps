@@ -55,51 +55,95 @@ Når du kører `update-devapps`, kontrollerer scriptet, om der er en nyere **Git
 
 ## 4. Ændr hvilke programmer der håndteres
 
-**Brug en separat lokal fil**, så dine personlige ændringer ikke overskrives af næste GitHub Release.
+Du skal **kun ændre** `Applications.local.ps1` for at tilpasse programmerne på din egen computer.
 
-1. Åbn eller opret den lokale fil:
+Filen bliver ikke overskrevet, når `update-devapps` henter en ny GitHub Release.
 
-   ```powershell
-   notepad "$env:LOCALAPPDATA\Programs\DevAppUpdater\Applications.local.ps1"
-   ```
+### 1. Åbn eller opret din lokale konfigurationsfil
 
-2. Indsæt for eksempel dette for at **fjerne Obsidian** fra din lokale liste:
+Åbn PowerShell, og kør:
 
-   ```powershell
-   $ApplicationDefinitions = @(
-       $ApplicationDefinitions | Where-Object {
-           $_.PackageId -ne 'Obsidian.Obsidian'
-       }
-   )
-   ```
+```
+notepad "$env:LOCALAPPDATA\Programs\DevAppUpdater\Applications.local.ps1"
+```
 
-3. Hvis du også vil **tilføje 7-Zip**, indsæt dette nedenunder:
+Hvis filen ikke findes, skal du vælge **Ja** for at oprette den.
 
-   ```powershell
-   $ApplicationDefinitions += @{
-       Name = '7-Zip'
-       PackageId = '7zip.7zip'
-   }
-   ```
+### 2. Fjern programmer fra listen
 
-4. Gem med **Ctrl + S**. Ændringerne bruges næste gang, du kører `update-devapps`. Du behøver ikke køre `-Setup` igen.
+Hvis du ikke ønsker, at scriptet skal installere eller opdatere eksempelvis **Obsidian** eller **Postman**:
 
-**Find det korrekte WinGet-ID:**
+```powershell
+# REMOVE - Programmer der ikke skal håndteres
+$ApplicationDefinitions = @($ApplicationDefinitions | Where-Object { $_.PackageId -ne 'Obsidian.Obsidian' })
+$ApplicationDefinitions = @($ApplicationDefinitions | Where-Object { $_.PackageId -ne 'Postman.Postman' })
+```
+
+Dette fjerner kun programmerne fra opdateringslisten. De bliver ikke afinstalleret fra computeren.
+
+### 3. Tilføj programmer til listen
+
+Hvis du ønsker at tilføje eksempelvis **7-Zip** eller **VLC**:
+
+```powershell
+# ADD - Programmer der skal tilføjes
+$ApplicationDefinitions += @{ Name = '7-Zip'; PackageId = '7zip.7zip' }
+$ApplicationDefinitions += @{ Name = 'VLC';   PackageId = 'VideoLAN.VLC' }
+```
+
+Programmerne installeres, hvis de mangler, og opdateres, hvis de allerede findes.
+
+### 4. Opdatér et program uden at installere det
+
+Hvis du eksempelvis ønsker, at **Git** kun skal opdateres, hvis det allerede er installeret, skal du bruge:
+
+```powershell
+# UPDATE ONLY - Installér ikke programmet, hvis det mangler
+$ApplicationDefinitions | Where-Object { $_.PackageId -eq 'Git.Git' } | ForEach-Object { $_['InstallIfMissing'] = $false }
+```
+
+Git forbliver på listen, men installeres ikke automatisk, hvis det mangler.
+
+### 5. Gem dine ændringer
+
+1. Tryk **Ctrl + S** i Notepad.
+2. Luk Notepad.
+3. Kør følgende for at se resultatet:
+
+```
+update-devapps -CheckOnly
+```
+
+Du behøver **ikke køre** `**-Setup**` **igen**.
+
+---
+
+### Eksempel på en komplet Applications.local.ps1
+
+Du kan kombinere alle ændringer i den samme fil:
+
+```powershell
+# REMOVE - Programmer der ikke skal håndteres
+$ApplicationDefinitions = @($ApplicationDefinitions | Where-Object { $_.PackageId -ne 'Obsidian.Obsidian' })
+$ApplicationDefinitions = @($ApplicationDefinitions | Where-Object { $_.PackageId -ne 'Postman.Postman' })
+
+# ADD - Programmer der skal tilføjes
+$ApplicationDefinitions += @{ Name = '7-Zip'; PackageId = '7zip.7zip' }
+$ApplicationDefinitions += @{ Name = 'VLC';   PackageId = 'VideoLAN.VLC' }
+
+# UPDATE ONLY - Installér ikke programmet, hvis det mangler
+$ApplicationDefinitions | Where-Object { $_.PackageId -eq 'Git.Git' } | ForEach-Object { $_['InstallIfMissing'] = $false }
+```
+
+**Find WinGet-ID for et nyt program:**
 
 ```powershell
 winget search "Programnavn"
 ```
 
-**Opdatér kun et program, hvis det allerede er installeret:**
+**Husk:** Slet eller udkommentér en linje med `#`, hvis du ikke længere ønsker den pågældende ændring.
 
-```powershell
-@{ Name = 'Git'; PackageId = 'Git.Git'; InstallIfMissing = $false }
-```
-
-Denne linje er et eksempel på en post i `$ApplicationDefinitions`. Hvis du ønsker at ændre **standardlisten for alle brugere**, skal du ændre scriptet på `dev`, oprette en pull request til release-branchen og udgive en ny release.
-
-> **Vigtigt:** Redigér normalt ikke den installerede `Update-DevelopmentApps.ps1` direkte. Selvopdatering erstatter filen, så lokale ændringer dér går tabt.
-
+Ændringer i `Applications.local.ps1` gælder kun din computer. Standardlisten i GitHub-releasen forbliver uændret.
 ## Programmer på standardlisten
 
 | | | |
@@ -112,4 +156,3 @@ Denne linje er et eksempel på en post i `$ApplicationDefinitions`. Hvis du øns
 | Git | Python 3.15 | Java JDK 25 LTS |
 | .NET 10 SDK | .NET 11 SDK | PowerShell |
 
-> Listen omfatter **administrationsprogrammer**, ikke selve SQL Server-, MySQL-, MongoDB- eller Neo4j-databaseserverne. DataGrip overlades til JetBrains Toolbox, hvis den er installeret.
