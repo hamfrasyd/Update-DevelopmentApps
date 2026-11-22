@@ -107,3 +107,28 @@ Filen oprettes først, når du ændrer noget. Du kan nulstille dine egne valg ve
 Programlisten omfatter databaseklienter, **ikke selve serverne** (SQL Server-, MySQL-, MongoDB- eller Neo4j-server).
 
 Nogle programinstallationer kan kræve administratorgodkendelse.
+
+## Udgiv en version
+
+Nye versioner publiceres fra GitHub Actions. Du skal ikke ændre `$ScriptVersion`, oprette et tag eller uploade `.ps1`-filen selv. Release notes skrives af GitHub. `CHANGELOG.md` er ikke en del af publiceringen.
+
+Kildekoden på `dev` og `main` har altid:
+
+```powershell
+$ScriptVersion = '0.0.0'
+```
+
+Den fil, der lægges på releasen, får det rigtige nummer. `v2.0.0` indeholder derfor `$ScriptVersion = '2.0.0'`.
+
+1. Udvikl på `dev`, commit og push.
+2. Opret en pull request fra `dev` til `main`. Actions validerer scriptet og kører tests.
+3. Gennemgå og merge. Der pushes ikke direkte til `main`.
+4. Åbn **Actions → Publish Release**, vælg branch **`main`**, og vælg versionsændring:
+   - **patch** — `2.0.0` bliver `2.0.1` (standard)
+   - **minor** — `2.0.0` bliver `2.1.0`
+   - **major** — `1.0.0` bliver `2.0.0`
+5. Start workflowet.
+
+GitHub læser seneste stabile release, beregner næste nummer, bygger `Update-DevelopmentApps.ps1`, opretter tag og release og markerer den som seneste. Et eksisterende tag overskrives ikke. Starter du workflowet fra `dev`, stopper det med en fejl.
+
+Kør scriptet fra repositorymappen, mens du udvikler. `-Setup` kopierer kildefilen med `0.0.0` til installationsmappen, og næste kørsel henter derfor seneste release.

@@ -53,9 +53,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# Release and installation constants. Keep the version as a literal: the release
-# updater verifies that the script version matches the GitHub release tag.
-$ScriptVersion = '2.0.0'
+# Release and installation constants. The source placeholder stays 0.0.0.
+# Publish Release replaces it in the uploaded asset. The self-updater requires
+# that literal to match the GitHub tag vMAJOR.MINOR.PATCH. Do not edit it here.
+$ScriptVersion = '0.0.0'
 $script:GitHubOwner = 'hamfrasyd'
 $script:GitHubRepository = 'Update-DevelopmentApps'
 $script:ScriptFileName = 'Update-DevelopmentApps.ps1'

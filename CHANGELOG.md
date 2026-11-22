@@ -11,5 +11,4 @@
 - Centraliserer installationsstier og filnavne i scriptet.
 - `-Check` respekterer også indstillinger fra `-DisableInstall`, når et program mangler.
 - Tilføjer PowerShell-syntakskontrol og konfigurations-smoketests i GitHub Actions.
-
-**Release:** Udskift ikke den gamle v1-release. Udgiv en ny `v2.0.0`, som indeholder `Update-DevelopmentApps.ps1` som vedhæftet asset.
+- Publicerer nye versioner fra GitHub Actions. `$ScriptVersion` i kildekoden forbliver `0.0.0`; releasefilen får versionsnummeret automatisk.
